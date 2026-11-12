@@ -115,6 +115,24 @@
     <div id="res-info"></div>
     <div class="table-wrap"><table id="res-tabla"></table></div>
     <div id="res-progresion" class="note"></div>
+    <details class="guia">
+      <summary>¿Cómo leer estos resultados?</summary>
+      <dl>
+        <dt>Exactitud al inicio y al final</dt><dd>Qué tan bien coincide la mirada estimada con puntos conocidos, antes y después de la actividad. Menos de 2° es buena; de 2 a 4°, aceptable. Si la final es mucho peor que la inicial, el niño se movió o cambió la luz, y los resultados de la sesión son menos confiables.</dd>
+        <dt>Desviación al inicio del bloque</dt><dd>Distancia entre la mirada estimada y el punto central antes de cada bloque. Valores de más de 3–4° indican que la calibración se degradó.</dd>
+        <dt>Tiempo sobre el objeto</dt><dd>Porcentaje del tiempo en que la mirada estuvo a menos de 3° del objeto. Es la medida principal de seguimiento: más alto es mejor.</dd>
+        <dt>Mantenimiento máximo de la mirada</dt><dd>El periodo continuo más largo mirando el objeto (segundos). Corresponde al «tiempo que puede mantener viendo un objeto».</dd>
+        <dt>Error medio de posición</dt><dd>Distancia promedio entre la mirada y el objeto, en grados. Más bajo es mejor. Incluye el error propio de la cámara (la exactitud), así que nunca llega a 0.</dd>
+        <dt>Ganancia de persecución</dt><dd>Velocidad del ojo dividida entre la velocidad del objeto cuando éste se mueve. 1 = el ojo va a la misma velocidad; menos de 1 = el ojo se queda atrás. Sólo aplica a trayectorias en movimiento.</dd>
+        <dt>Sacadas de corrección</dt><dd>Saltos rápidos del ojo por minuto. En la persecución, muchas sacadas indican que el ojo se rezaga y «alcanza» al objeto a saltos. Con cámara web sólo se detectan las mayores de ~4°.</dd>
+        <dt>Fijación más larga sobre el objeto</dt><dd>La fijación (mirada quieta) más larga que cayó sobre el objeto, en milisegundos.</dd>
+        <dt>Latencia y su variabilidad</dt><dd>Tiempo entre que el objeto aparece en otro lugar y el ojo empieza a moverse hacia él (normal en niños: unos 250–300 ms), y cuánto varía entre ensayos. Sólo en módulos con saltos o reapariciones.</dd>
+        <dt>Precisión sacádica</dt><dd>Qué fracción de la distancia recorre el primer salto del ojo. 1 = llega justo; menos de 1 = se queda corto.</dd>
+        <dt>Ensayos válidos</dt><dd>Saltos del objeto en los que se pudo medir la latencia. Se descartan si antes del salto el niño no miraba el objeto, si se anticipó o si no respondió.</dd>
+        <dt>Pérdida de datos</dt><dd>Porcentaje de muestras sin mirada válida (parpadeos, ojos fuera de la cámara o cabeza fuera de su lugar).</dd>
+        <dt>Frecuencia de muestreo efectiva</dt><dd>Mediciones por segundo. Con cámara web conviene 25–30 Hz o más; valores bajos indican que la computadora procesa lento.</dd>
+      </dl>
+    </details>
     <p id="res-drive" class="hint"></p>
     <div class="actions">
       <button id="btn-crudo">Descargar datos crudos (CSV)</button>

@@ -167,6 +167,7 @@ export function validationQuality(points, pxPerDeg) {
 }
 
 export const METRIC_LABELS = {
+  derivaInicialDeg: ['Desviación al inicio del bloque (deriva)', '°'],
   tiempoSobreObjeto: ['Tiempo sobre el objeto', '%'],
   rachaMaximaS: ['Mantenimiento máximo de la mirada', 's'],
   errorMedioDeg: ['Error medio de posición', '°'],

@@ -40,47 +40,7 @@ export function extractFeatures(result) {
   return { ok: open > 0.12, reason: open > 0.12 ? '' : 'parpadeo', f, open, scale, landmarks: lm };
 }
 
-// ---------- Regresión de cresta ----------
-function solve(A, b) { // eliminación gaussiana con pivoteo parcial
-  const n = b.length, M = A.map((row, i) => [...row, b[i]]);
-  for (let c = 0; c < n; c++) {
-    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
-    [M[c], M[p]] = [M[p], M[c]];
-    const piv = M[c][c] || 1e-12;
-    for (let r = c + 1; r < n; r++) { const k = M[r][c] / piv; for (let j = c; j <= n; j++) M[r][j] -= k * M[c][j]; }
-  }
-  const x = new Array(n).fill(0);
-  for (let r = n - 1; r >= 0; r--) { let s = M[r][n]; for (let j = r + 1; j < n; j++) s -= M[r][j] * x[j]; x[r] = s / (M[r][r] || 1e-12); }
-  return x;
-}
-
-export class GazeModel {
-  constructor(json) { if (json) Object.assign(this, json); }
-  design(f) {
-    const z = f.map((v, i) => (v - this.mu[i]) / this.sd[i]);
-    const mx = (z[0] + z[2]) / 2, my = (z[1] + z[3]) / 2;
-    return [1, ...z, mx * mx, my * my, mx * my];
-  }
-  fit(X, Y, lambda = 1.0) { // X: vectores de rasgos, Y: [x, y] en px
-    const k = X[0].length;
-    this.mu = Array.from({ length: k }, (_, i) => X.reduce((s, f) => s + f[i], 0) / X.length);
-    this.sd = Array.from({ length: k }, (_, i) => Math.sqrt(X.reduce((s, f) => s + (f[i] - this.mu[i]) ** 2, 0) / X.length) || 1);
-    const D = X.map((f) => this.design(f)), p = D[0].length;
-    const A = Array.from({ length: p }, () => new Array(p).fill(0));
-    const bx = new Array(p).fill(0), by = new Array(p).fill(0);
-    D.forEach((row, n) => { for (let i = 0; i < p; i++) { bx[i] += row[i] * Y[n][0]; by[i] += row[i] * Y[n][1]; for (let j = 0; j < p; j++) A[i][j] += row[i] * row[j]; } });
-    for (let i = 1; i < p; i++) A[i][i] += lambda; // no se penaliza el intercepto
-    this.wx = solve(A, bx); this.wy = solve(A, by);
-    this.offset = [0, 0];
-    return this;
-  }
-  predict(f) {
-    const d = this.design(f);
-    let x = 0, y = 0; for (let i = 0; i < d.length; i++) { x += d[i] * this.wx[i]; y += d[i] * this.wy[i]; }
-    return [x + this.offset[0], y + this.offset[1]];
-  }
-  toJSON() { return { mu: this.mu, sd: this.sd, wx: this.wx, wy: this.wy, offset: this.offset }; }
-}
+export { GazeModel, HEAD_LIMITS } from './gaze-model.js';
 
 // ---------- Filtro One-Euro (sólo para la retroalimentación en pantalla) ----------
 export class OneEuro {
@@ -121,16 +81,26 @@ export class GazeSource {
     this.cameraInfo = { width: settings.width, height: settings.height, frameRate: settings.frameRate, label: this.stream.getVideoTracks()[0].label };
     onStatus('');
     let lastTs = -1, frames = 0, fpsT = performance.now();
+    this.clock = { n: 0, usados: 0, offsets: [] };
     const step = (now, meta) => {
       if (this.mode !== 'camara') return;
       // Marca temporal: momento de captura del cuadro si el navegador lo informa.
-      const t = (meta && (meta.captureTime || meta.expectedDisplayTime)) || now;
+      // Se descarta si viene de otro reloj (algunas cámaras/sistemas).
+      const cap = meta && meta.captureTime;
+      const useCap = cap && Math.abs(now - cap) < 300;
+      const t = useCap ? cap : now;
+      // Diagnóstico del reloj de la cámara (se guarda con cada sesión).
+      if (this.clock.n < 60) {
+        this.clock.n++; if (cap) this.clock.offsets.push(now - cap); if (useCap) this.clock.usados++;
+        const o = [...this.clock.offsets].sort((a, b) => a - b);
+        this.clockInfo = { captureTime: !!cap, desfaseMedianoMs: o.length ? +o[o.length >> 1].toFixed(1) : null, fraccionUsada: +(this.clock.usados / this.clock.n).toFixed(2) };
+      }
       const ts = Math.max(now, lastTs + 0.001); lastTs = ts;
       const res = this.landmarker.detectForVideo(video, ts);
       const fe = extractFeatures(res);
       frames++; if (now - fpsT > 1000) { this.fps = frames * 1000 / (now - fpsT); frames = 0; fpsT = now; }
       const s = { t, ok: fe.ok, reason: fe.reason, f: fe.f, open: fe.open, scale: fe.scale, landmarks: fe.landmarks };
-      if (fe.ok && this.model) [s.x, s.y] = this.model.predict(fe.f);
+      if (fe.ok && this.model) { [s.x, s.y] = this.model.predict(fe.f); s.head = this.model.headDeviation(fe.f); }
       this.emit(s);
       video.requestVideoFrameCallback(step);
     };

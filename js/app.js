@@ -1,5 +1,5 @@
 import { VERSION, MODULES, EVALUATION_BATTERY, ANALYSIS_DEFAULTS, PROGRESSION, TRAINING_BLOCKS_PER_SESSION, FIGURES, COLORS, EVAL_TARGET, FEEDBACK, EYETRACKER_URL } from './config.js';
-import { GazeSource, GazeModel, OneEuro } from './tracker.js';
+import { GazeSource, GazeModel, OneEuro, HEAD_LIMITS } from './tracker.js';
 import { createStimulus } from './stimuli.js';
 import { analyzeBlock, validationQuality, METRIC_LABELS, fmt } from './analysis.js';
 import * as db from './storage.js';
@@ -256,16 +256,20 @@ async function runCalibration() {
     state.model = new GazeModel().fit(X, Y, 1.0);
     gaze.model = state.model; nCal = X.length;
   }
-  // Validación con puntos distintos a los de calibración.
+  state.calidad = { ...(await validationPass(prev)), muestrasCalibracion: nCal };
+  leaveStage();
+  if (!state.calidad.points.length) { alert('No se recibieron datos de mirada durante la validación.'); show('camara'); startPreparation(); return; }
+  renderQuality(); show('calidad');
+}
+
+// Validación con 5 puntos distintos a los de calibración.
+async function validationPass(prev = { x: innerWidth / 2, y: innerHeight / 2 }) {
   const val = shuffle(gridPoints([[.3, .3], [.7, .3], [.5, .5], [.3, .7], [.7, .7]])); const pts = [];
   for (const p of val) {
     const ss = await presentPoint(prev, p, { collect: (s) => ({ x: s.x, y: s.y }) });
     pts.push({ ...p, samples: ss }); prev = p;
   }
-  state.calidad = { ...validationQuality(pts, pxPerDeg()), W: innerWidth, H: innerHeight, muestrasCalibracion: nCal };
-  leaveStage();
-  if (!state.calidad.points.length) { alert('No se recibieron datos de mirada durante la validación.'); show('camara'); startPreparation(); return; }
-  renderQuality(); show('calidad');
+  return { ...validationQuality(pts, pxPerDeg()), W: innerWidth, H: innerHeight };
 }
 
 function renderQuality() {
@@ -326,7 +330,7 @@ async function runSession() {
   const session = {
     id: `${c.participante}-${Date.now()}`, version: VERSION, participante: c.participante, grupo: c.grupo, condicion: c.condicion, edadAnios: c.edadAnios,
     tipoSesion: c.tipoSesion, numeroSesion: c.numeroSesion, inicio: new Date().toISOString(), entrada: c.entrada, retroalimentacion: { ...FEEDBACK },
-    equipo: { anchoCm: c.anchoCm, distanciaCm: c.distanciaCm, pantallaPx: [screen.width, screen.height], dispositivo: gaze.cameraInfo, navegador: navigator.userAgent },
+    equipo: { anchoCm: c.anchoCm, distanciaCm: c.distanciaCm, pantallaPx: [screen.width, screen.height], dispositivo: gaze.cameraInfo, reloj: gaze.clockInfo || null, navegador: navigator.userAgent },
     calidad: state.calidad && { exactitudDeg: state.calidad.exactitudDeg, precisionRmsDeg: state.calidad.precisionRmsDeg, puntos: state.calidad.points },
     parametros: P, bloques: [],
   };
@@ -350,11 +354,17 @@ async function runSession() {
     session.bloques.push(b);
   }
   removeEventListener('keydown', keyHandler);
+  // Validación final: mide cuánto se degradó la calibración durante la sesión.
+  if (!ctl.abort && c.entrada !== 'raton' && session.bloques.length) {
+    stageMessage('Últimos puntos: mira el punto blanco'); clear(); await sleep(1500); stageMessage('');
+    const q = await validationPass();
+    if (q.points.length) session.calidadFinal = { exactitudDeg: q.exactitudDeg, precisionRmsDeg: q.precisionRmsDeg, puntos: q.points };
+  }
   stageMessage('Terminamos'); clear(); await sleep(1500);
   leaveStage();
   if (!session.bloques.length) { show('plan'); return; }
   session.fin = new Date().toISOString();
-  for (const b of session.bloques) b.metricas = analyzeBlock({ samples: b.samples, events: b.events, pxPerDeg: b.geom.pxPerDeg }, P);
+  for (const b of session.bloques) b.metricas = blockMetrics(b, P);
   if (session.tipoSesion === 'entrenamiento') session.moduloSiguiente = await decideProgression(session);
   await db.saveSession(session);
   state.lastSession = session;
@@ -368,23 +378,31 @@ function runBlock(mod, index, ctl) {
   const stim = createStimulus(mod, geom, seed);
   const fig = blockFigure(mod);
   const samples = []; const fx = new OneEuro(1.2, 0.02), fy = new OneEuro(1.2, 0.02);
-  const t0 = performance.now(); let pausedAcc = 0, pauseStart = null, lastOk = performance.now();
+  const t0 = performance.now(); let pausedAcc = 0, pauseStart = null, lastOk = performance.now(), lastGood = performance.now();
   let fgx = null, fgy = null, onTime = 0, lastOnT = null, estrellas = 0, pausas = 0;
   const stimTime = (tAbs) => tAbs - t0 - pausedAcc;
   const off = gaze.on((s) => {
     if (pauseStart !== null) return;
     const t = stimTime(s.t); if (t < 0 || t > stim.durationMs) return;
     const tg = stim.at(t);
-    if (s.ok) { lastOk = performance.now(); fgx = fx.filter(s.x, s.t); fgy = fy.filter(s.y, s.t); }
-    samples.push({ t: +t.toFixed(1), ok: s.ok ? 1 : 0, gx: s.ok ? +s.x.toFixed(1) : null, gy: s.ok ? +s.y.toFixed(1) : null,
-      tx: +tg.x.toFixed(1), ty: +tg.y.toFixed(1), tvis: tg.visible ? 1 : 0, motivo: s.ok ? '' : s.reason || '' });
+    // Con cámara web, si la cabeza se alejó de la posición de calibración la
+    // estimación deja de ser confiable: la muestra se marca como inválida.
+    const fuera = s.ok && s.head && (s.head.shift > HEAD_LIMITS.shift || Math.abs(s.head.dist) > HEAD_LIMITS.dist);
+    const ok = s.ok && !fuera;
+    if (s.ok) lastOk = performance.now();
+    if (ok) { lastGood = performance.now(); fgx = fx.filter(s.x, s.t); fgy = fy.filter(s.y, s.t); }
+    samples.push({ t: +t.toFixed(1), ok: ok ? 1 : 0, gx: ok ? +s.x.toFixed(1) : null, gy: ok ? +s.y.toFixed(1) : null,
+      tx: +tg.x.toFixed(1), ty: +tg.y.toFixed(1), tvis: tg.visible ? 1 : 0, motivo: ok ? '' : (fuera ? 'posicion' : s.reason || '') });
   });
   return new Promise((resolve) => {
     const frame = () => {
       const now = performance.now();
-      // Pausa manual, o automática si se pierden los ojos > 1.5 s.
-      const lost = gaze.mode !== 'raton' && now - lastOk > 1500;
-      if ((ctl.pause || lost) && pauseStart === null) { pauseStart = now; pausas++; stageMessage(lost && !ctl.pause ? 'Mira de nuevo a la pantalla' : 'Pausa<br><small>Espacio para continuar</small>'); }
+      // Pausa manual, o automática si se pierden los ojos o la posición > 1.2 s.
+      const lost = gaze.mode !== 'raton' && now - lastGood > 1200;
+      if ((ctl.pause || lost) && pauseStart === null) {
+        pauseStart = now; pausas++;
+        stageMessage(ctl.pause ? 'Pausa<br><small>Espacio para continuar</small>' : now - lastOk > 1200 ? 'Mira de nuevo a la pantalla' : 'Regresa a tu lugar<br><small>como al principio</small>');
+      }
       if (pauseStart !== null && !ctl.pause && !lost) { pausedAcc += now - pauseStart; pauseStart = null; stageMessage(''); }
       const t = pauseStart !== null ? pauseStart - t0 - pausedAcc : stimTime(now);
       if (t >= stim.durationMs || ctl.skip || ctl.abort) {
@@ -405,6 +423,8 @@ function runBlock(mod, index, ctl) {
     requestAnimationFrame(frame);
   });
 }
+
+const blockMetrics = (b, P) => ({ ...analyzeBlock({ samples: b.samples, events: b.events, pxPerDeg: b.geom.pxPerDeg }, P), derivaInicialDeg: b.deriva ? b.deriva.deg : NaN });
 
 // Regla adaptativa entre sesiones de entrenamiento.
 async function decideProgression(session) {
@@ -450,11 +470,12 @@ $('#btn-drive-pendientes').onclick = async () => {
 };
 
 // ---------------- Resultados ----------------
-const KEY_METRICS = ['tiempoSobreObjeto', 'rachaMaximaS', 'errorMedioDeg', 'gananciaPersecucion', 'sacadasPorMin', 'fijacionMaximaSobreObjetoMs', 'latenciaMediaMs', 'latenciaDEms', 'gananciaSacadica', 'ensayosValidos', 'perdidaDatos', 'frecuenciaHz'];
+const KEY_METRICS = ['derivaInicialDeg', 'tiempoSobreObjeto', 'rachaMaximaS', 'errorMedioDeg', 'gananciaPersecucion', 'sacadasPorMin', 'fijacionMaximaSobreObjetoMs', 'latenciaMediaMs', 'latenciaDEms', 'gananciaSacadica', 'ensayosValidos', 'perdidaDatos', 'frecuenciaHz'];
 function renderResults(s) {
   const dur = s.fin ? Math.round((new Date(s.fin) - new Date(s.inicio)) / 60000) : null;
   $('#res-info').innerHTML = `<p><b>${esc(s.participante)}</b> · ${s.grupo} · ${labelTipo(s.tipoSesion)} · sesión ${s.numeroSesion}<br>
-    Fecha: <b>${db.fechaLocal(s.inicio)}</b> · inicio ${db.horaLocal(s.inicio)}${s.fin ? ` · fin ${db.horaLocal(s.fin)} (${dur} min)` : ''} · fuente: ${fuente(s.entrada)}${s.edadAnios ? ` · edad ${s.edadAnios.toFixed(1)} años` : ''}</p>`;
+    Fecha: <b>${db.fechaLocal(s.inicio)}</b> · inicio ${db.horaLocal(s.inicio)}${s.fin ? ` · fin ${db.horaLocal(s.fin)} (${dur} min)` : ''} · fuente: ${fuente(s.entrada)}${s.edadAnios ? ` · edad ${s.edadAnios.toFixed(1)} años` : ''}<br>
+    Exactitud de la calibración: al inicio <b>${s.calidad ? s.calidad.exactitudDeg.toFixed(2) + '°' : '—'}</b> · al final <b>${s.calidadFinal ? s.calidadFinal.exactitudDeg.toFixed(2) + '°' : '—'}</b>${s.equipo.reloj && s.equipo.reloj.captureTime ? ` · reloj de la cámara: ${s.equipo.reloj.fraccionUsada === 1 ? 'sincronizado' : `corregido (desfase ${s.equipo.reloj.desfaseMedianoMs} ms)`}` : ''}</p>`;
   const head = `<tr><th>Métrica</th>${s.bloques.map((b) => `<th>Bloque ${b.indice}<br><small>${esc(b.modulo.name)}</small></th>`).join('')}</tr>`;
   const rows = KEY_METRICS.filter((k) => s.bloques.some((b) => b.metricas[k] !== undefined && !Number.isNaN(b.metricas[k])))
     .map((k) => `<tr><td>${METRIC_LABELS[k][0]}</td>${s.bloques.map((b) => `<td>${fmt(k, b.metricas[k])}</td>`).join('')}</tr>`).join('');
@@ -537,7 +558,7 @@ $('#in-respaldo').onchange = async (e) => {
 $('#btn-recalcular').onclick = async () => {
   if (!confirm('Se recalcularán las métricas de TODAS las sesiones con los parámetros actuales. ¿Continuar?')) return;
   const P = params();
-  for (const s of await db.allSessions()) { for (const b of s.bloques) b.metricas = analyzeBlock({ samples: b.samples, events: b.events, pxPerDeg: b.geom.pxPerDeg }, P); s.parametros = P; await db.saveSession(s); }
+  for (const s of await db.allSessions()) { for (const b of s.bloques) b.metricas = blockMetrics(b, P); s.parametros = P; await db.saveSession(s); }
   renderHistory();
 };
 

@@ -52,3 +52,7 @@ form > details { margin-top: 18px; }
 label small { font-weight: normal; }
 .drive-box { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
 .drive-box .actions { margin-top: 10px; }
+.guia { margin-top: 14px; }
+.guia dl { margin: 10px 0 0; font-size: .92rem; }
+.guia dt { font-weight: 600; margin-top: 10px; }
+.guia dd { margin: 2px 0 0; color: var(--muted); }

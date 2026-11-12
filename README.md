@@ -169,6 +169,10 @@ El puente incluido funciona con **Tobii Pro**, que tiene SDK para Python. Para o
   * si es posible, comparar contra un equipo de referencia (p. ej. Tobii) en algunos participantes.
 
   Después del piloto, **no cambie los parámetros**. Se guardan con cada sesión, y el botón «Recalcular métricas» permite volver a analizar todo con un mismo conjunto de parámetros.
+* **Movimiento de la cabeza.** Con cámara web, la estimación es confiable sólo cerca de la posición de calibración.
+  * Si la cabeza se desplaza más de un tercio del ancho del rostro, o la distancia cambia más de 15 %, el juego se pausa («Regresa a tu lugar») y esas muestras se marcan como inválidas (`motivo = posicion`).
+  * Al final de cada sesión se repite la validación de 5 puntos. Su exactitud se guarda junto con la inicial para juzgar la calidad del dato.
+* **Reloj de la cámara.** Cada sesión guarda si la marca de tiempo de la cámara coincidía con la del navegador (`equipo.reloj`). Si no coincide, se usa la del navegador.
 * **Mismo equipo para las evaluaciones.** Use el mismo equipo y la misma ubicación en T0, T1 y T2, aunque el entrenamiento se haga en otros equipos.
 * Los 10 módulos son una propuesta inicial. Requieren la **validación de contenido por expertos** del objetivo 2. Todos los valores se editan en `js/config.js`.
 

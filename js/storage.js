@@ -73,6 +73,7 @@ export function summaryRows(sessions) {
       numeroSesion: s.numeroSesion, fecha: fechaLocal(s.inicio), hora: horaLocal(s.inicio), inicioISO: s.inicio, entrada: s.entrada,
       figura: b.figura, retroalimentacion: s.retroalimentacion && Object.values(s.retroalimentacion).some(Boolean) ? 'si' : 'no',
       exactitudCalibDeg: s.calidad && s.calidad.exactitudDeg, precisionCalibDeg: s.calidad && s.calidad.precisionRmsDeg,
+      exactitudFinalDeg: s.calidadFinal && s.calidadFinal.exactitudDeg, desfaseRelojMs: s.equipo && s.equipo.reloj && s.equipo.reloj.desfaseMedianoMs,
       bloque: b.indice, modulo: b.modulo.id, nombreModulo: b.modulo.name, trayectoria: b.modulo.type,
       velocidadDegS: Array.isArray(b.modulo.speedDegS) ? b.modulo.speedDegS.join('-') : b.modulo.speedDegS,
       semilla: b.semilla, versionPrograma: s.version, ...b.metricas });
