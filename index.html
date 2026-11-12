@@ -49,6 +49,12 @@
             <option value="eyetracker">Eye tracker (programa puente)</option>
             <option value="raton">Ratón (prueba sin cámara)</option>
           </select></label>
+        <label>Resolución de la cámara
+          <select name="resolucion">
+            <option value="640x480">640 × 480 (más rápida)</option>
+            <option value="960x540">960 × 540</option>
+            <option value="1280x720">1280 × 720 (más detalle, más lenta)</option>
+          </select></label>
         <label>Ancho visible de la pantalla (cm) <input name="anchoCm" type="number" step="0.1" min="15" max="200" required value="34.5"></label>
         <label>Distancia ojos–pantalla (cm) <input name="distanciaCm" type="number" step="1" min="30" max="150" required value="60"></label>
         <label class="check"><input type="checkbox" name="deriva" checked> Corrección de deriva antes de cada bloque (cámara)</label>

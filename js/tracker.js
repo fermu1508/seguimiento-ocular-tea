@@ -63,7 +63,8 @@ export class GazeSource {
   on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   emit(s) { for (const fn of this.listeners) fn(s); }
 
-  async startCamera(video, onStatus = () => {}) {
+  async startCamera(video, onStatus = () => {}, res = [640, 480]) {
+    this.res = res.join('x');
     this.mode = 'camara';
     onStatus('Cargando modelo de visión…');
     const fileset = await FilesetResolver.forVisionTasks(new URL('../vendor/mediapipe/wasm', import.meta.url).href);
@@ -75,7 +76,7 @@ export class GazeSource {
     try { this.landmarker = await FaceLandmarker.createFromOptions(fileset, opts('GPU')); this.delegate = 'GPU'; }
     catch { this.landmarker = await FaceLandmarker.createFromOptions(fileset, opts('CPU')); this.delegate = 'CPU'; }
     onStatus('Solicitando acceso a la cámara…');
-    this.stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 }, facingMode: 'user' }, audio: false });
+    this.stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: res[0] }, height: { ideal: res[1] }, frameRate: { ideal: 30 }, facingMode: 'user' }, audio: false });
     video.srcObject = this.stream; await video.play();
     this.video = video;
     const settings = this.stream.getVideoTracks()[0].getSettings();

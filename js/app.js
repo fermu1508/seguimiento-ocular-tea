@@ -49,6 +49,7 @@ const saved = LS.get('equipo', {});
 if (saved.anchoCm) form.anchoCm.value = saved.anchoCm;
 if (saved.distanciaCm) form.distanciaCm.value = saved.distanciaCm;
 if (saved.entrada) form.entrada.value = saved.entrada;
+if (saved.resolucion) form.resolucion.value = saved.resolucion;
 renderParams();
 
 async function loadParticipants(select) {
@@ -86,9 +87,9 @@ form.onsubmit = async (e) => {
   state.cfg = {
     participante: codigo, grupo: part.grupo, condicion: part.condicion, edadAnios: db.ageYears(part.nacimiento), figura: part.figura, color: part.color,
     tipoSesion: f.get('tipoSesion'), modulo: f.get('modulo'), anchoCm: Number(f.get('anchoCm')), distanciaCm: Number(f.get('distanciaCm')),
-    entrada: f.get('entrada'), deriva: !!f.get('deriva'),
+    entrada: f.get('entrada'), resolucion: f.get('resolucion'), deriva: !!f.get('deriva'),
   };
-  LS.set('equipo', { anchoCm: state.cfg.anchoCm, distanciaCm: state.cfg.distanciaCm, entrada: state.cfg.entrada });
+  LS.set('equipo', { anchoCm: state.cfg.anchoCm, distanciaCm: state.cfg.distanciaCm, entrada: state.cfg.entrada, resolucion: state.cfg.resolucion });
   await loadParticipants(codigo);
   await buildPlan();
   if (state.cfg.entrada === 'raton') {
@@ -112,11 +113,11 @@ async function startPreparation() {
   btn.textContent = et ? 'Validar (pantalla completa)' : 'Calibrar (pantalla completa)';
   btn.disabled = true; st.className = 'status';
   if (previewOff) { previewOff(); previewOff = null; }
-  if (gaze.mode !== state.cfg.entrada) {
+  if (gaze.mode !== state.cfg.entrada || (!et && gaze.res !== state.cfg.resolucion)) {
     gaze.stop(); state.model = null; gaze.model = null;
     try {
       if (et) await gaze.startEyeTracker(EYETRACKER_URL, (m) => (st.textContent = m));
-      else await gaze.startCamera($('#video'), (m) => (st.textContent = m));
+      else await gaze.startCamera($('#video'), (m) => (st.textContent = m), state.cfg.resolucion.split('x').map(Number));
     } catch (err) { gaze.stop(); st.textContent = (et ? '' : 'No fue posible iniciar la cámara: ') + err.message; st.className = 'status bad'; return; }
   }
   const ov = $('#cam-overlay'), octx = ov.getContext('2d');
