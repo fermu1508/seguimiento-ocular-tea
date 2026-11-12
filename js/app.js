@@ -137,9 +137,10 @@ async function startPreparation() {
     }
     const dist = s.scale ? `Tamaño del rostro: ${(s.scale * 100).toFixed(0)} %` : '';
     if (s.ok && okCount > 15) {
-      const lento = gaze.fps < 20;
-      st.innerHTML = `Rostro y ojos detectados · ${gaze.fps.toFixed(0)} cuadros/s · procesamiento ${gaze.delegate || ''} ${gaze.procMs ? gaze.procMs.toFixed(0) + ' ms' : ''} (${gaze.hilo === 'paralelo' ? 'en paralelo' : 'hilo principal'}) · ${dist}` +
-        (lento ? `<br><small>⚠ Frecuencia baja (ideal ≥ 25). Cierre otros programas y pestañas; en Chrome active Configuración → Sistema → «Usar aceleración de gráficos cuando esté disponible» y reinicie el navegador.</small>` : '');
+      const lento = gaze.fps < 20, camLenta = gaze.camFps && gaze.camFps < 20;
+      st.innerHTML = `Rostro y ojos detectados · cámara entrega ${gaze.camFps ? gaze.camFps.toFixed(0) : '?'} cuadros/s · se procesan ${gaze.fps.toFixed(0)}/s · procesamiento ${gaze.delegate || ''} ${gaze.procMs ? gaze.procMs.toFixed(0) + ' ms' : ''} (${gaze.hilo === 'paralelo' ? 'en paralelo' : 'hilo principal'}) · ${dist}` +
+        (camLenta ? `<br><small>⚠ La cámara entrega pocas imágenes por segundo. Suele deberse a poca luz: encienda una lámpara frente al rostro (no detrás) y aleje la cámara de ventanas a contraluz. En Windows, abra la app Cámara → Configuración y desactive «Compensación de poca luz» si existe.</small>` : '') +
+        (lento && !camLenta ? `<br><small>⚠ Frecuencia baja (ideal ≥ 25). Cierre otros programas y pestañas; en Chrome active Configuración → Sistema → «Usar aceleración de gráficos cuando esté disponible» y reinicie el navegador.</small>` : '');
       st.className = lento ? 'status' : 'status ok'; btn.disabled = false;
     }
     else if (!s.ok) { st.textContent = s.reason === 'parpadeo' ? 'Ojos cerrados o no visibles' : 'Buscando el rostro…'; st.className = 'status bad'; }

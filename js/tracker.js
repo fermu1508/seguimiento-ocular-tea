@@ -71,7 +71,8 @@ export class GazeSource {
     const settings = this.stream.getVideoTracks()[0].getSettings();
     this.cameraInfo = { width: settings.width, height: settings.height, frameRate: settings.frameRate, label: this.stream.getVideoTracks()[0].label, procesador: this.delegate, hilo: this.hilo };
     onStatus('');
-    let lastTs = -1, frames = 0, fpsT = performance.now(), inFlight = 0;
+    let lastTs = -1, frames = 0, fpsT = performance.now(), inFlight = 0, camFrames = 0, camT = performance.now();
+    this.camFps = 0;
     this.clock = { n: 0, usados: 0, offsets: [] };
 
     const handle = (t, fe, procMs) => {
@@ -89,6 +90,8 @@ export class GazeSource {
     const step = (now, meta) => {
       if (this.mode !== 'camara') return;
       video.requestVideoFrameCallback(step);
+      // Imágenes que la cámara entrega realmente (con poca luz muchas bajan a 10–15/s).
+      camFrames++; if (now - camT > 1000) { this.camFps = camFrames * 1000 / (now - camT); camFrames = 0; camT = now; this.cameraInfo.entregaCamaraFps = +this.camFps.toFixed(1); }
       // Marca temporal: momento de captura del cuadro si el navegador lo informa.
       // Se descarta si viene de otro reloj (algunas cámaras/sistemas).
       const cap = meta && meta.captureTime;
