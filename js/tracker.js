@@ -71,14 +71,15 @@ export class GazeSource {
       baseOptions: { modelAssetPath: new URL('../models/face_landmarker.task', import.meta.url).href, delegate },
       runningMode: 'VIDEO', numFaces: 1, outputFacialTransformationMatrixes: true,
     });
-    try { this.landmarker = await FaceLandmarker.createFromOptions(fileset, opts('GPU')); }
-    catch { this.landmarker = await FaceLandmarker.createFromOptions(fileset, opts('CPU')); }
+    // GPU es mucho más rápido; si el navegador no lo permite se usa CPU.
+    try { this.landmarker = await FaceLandmarker.createFromOptions(fileset, opts('GPU')); this.delegate = 'GPU'; }
+    catch { this.landmarker = await FaceLandmarker.createFromOptions(fileset, opts('CPU')); this.delegate = 'CPU'; }
     onStatus('Solicitando acceso a la cámara…');
     this.stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 }, facingMode: 'user' }, audio: false });
     video.srcObject = this.stream; await video.play();
     this.video = video;
     const settings = this.stream.getVideoTracks()[0].getSettings();
-    this.cameraInfo = { width: settings.width, height: settings.height, frameRate: settings.frameRate, label: this.stream.getVideoTracks()[0].label };
+    this.cameraInfo = { width: settings.width, height: settings.height, frameRate: settings.frameRate, label: this.stream.getVideoTracks()[0].label, procesador: this.delegate };
     onStatus('');
     let lastTs = -1, frames = 0, fpsT = performance.now();
     this.clock = { n: 0, usados: 0, offsets: [] };
@@ -96,7 +97,11 @@ export class GazeSource {
         this.clockInfo = { captureTime: !!cap, desfaseMedianoMs: o.length ? +o[o.length >> 1].toFixed(1) : null, fraccionUsada: +(this.clock.usados / this.clock.n).toFixed(2) };
       }
       const ts = Math.max(now, lastTs + 0.001); lastTs = ts;
+      const d0 = performance.now();
       const res = this.landmarker.detectForVideo(video, ts);
+      // Tiempo de procesamiento por imagen (promedio móvil): limita la frecuencia.
+      this.procMs = this.procMs ? this.procMs * 0.95 + (performance.now() - d0) * 0.05 : performance.now() - d0;
+      this.cameraInfo.procesamientoMs = +this.procMs.toFixed(1);
       const fe = extractFeatures(res);
       frames++; if (now - fpsT > 1000) { this.fps = frames * 1000 / (now - fpsT); frames = 0; fpsT = now; }
       const s = { t, ok: fe.ok, reason: fe.reason, f: fe.f, open: fe.open, scale: fe.scale, landmarks: fe.landmarks };

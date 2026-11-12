@@ -134,7 +134,12 @@ async function startPreparation() {
       for (const i of [468, 473, 33, 133, 362, 263]) { const p = s.landmarks[i]; octx.beginPath(); octx.arc(p.x * ov.width, p.y * ov.height, 3, 0, 7); octx.fill(); }
     }
     const dist = s.scale ? `Tamaño del rostro: ${(s.scale * 100).toFixed(0)} %` : '';
-    if (s.ok && okCount > 15) { st.textContent = `Rostro y ojos detectados · ${gaze.fps.toFixed(0)} cuadros/s · ${dist}`; st.className = 'status ok'; btn.disabled = false; }
+    if (s.ok && okCount > 15) {
+      const lento = gaze.fps < 20;
+      st.innerHTML = `Rostro y ojos detectados · ${gaze.fps.toFixed(0)} cuadros/s · procesamiento ${gaze.delegate || ''} ${gaze.procMs ? gaze.procMs.toFixed(0) + ' ms' : ''} · ${dist}` +
+        (lento ? `<br><small>⚠ Frecuencia baja (ideal ≥ 25). Cierre otros programas y pestañas; en Chrome active Configuración → Sistema → «Usar aceleración de gráficos cuando esté disponible» y reinicie el navegador.</small>` : '');
+      st.className = lento ? 'status' : 'status ok'; btn.disabled = false;
+    }
     else if (!s.ok) { st.textContent = s.reason === 'parpadeo' ? 'Ojos cerrados o no visibles' : 'Buscando el rostro…'; st.className = 'status bad'; }
   });
 }
@@ -278,7 +283,7 @@ function renderQuality() {
   $('#calidad-resumen').innerHTML = `
     <div class="q ${cls(q.exactitudDeg)}">Exactitud<b>${q.exactitudDeg.toFixed(2)}°</b>${lbl(q.exactitudDeg)}</div>
     <div class="q ${cls(q.precisionRmsDeg * 2)}">Precisión (RMS)<b>${q.precisionRmsDeg.toFixed(2)}°</b></div>
-    <div class="q">Frecuencia<b>${gaze.fps.toFixed(0)} Hz</b>${gaze.cameraInfo ? esc(gaze.cameraInfo.label || '') : ''}</div>`;
+    <div class="q ${gaze.fps >= 25 ? 'ok' : gaze.fps >= 15 ? 'warn' : 'bad'}">Frecuencia<b>${gaze.fps.toFixed(0)} Hz</b>${gaze.cameraInfo ? esc(gaze.cameraInfo.label || '') : ''}${gaze.delegate ? ' · ' + gaze.delegate : ''}</div>`;
   const c = $('#calidad-mapa'), g = c.getContext('2d'), sx = c.width / q.W, sy = c.height / q.H;
   g.fillStyle = STAGE_BG; g.fillRect(0, 0, c.width, c.height);
   for (const p of q.points) {
