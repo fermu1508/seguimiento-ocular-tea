@@ -152,7 +152,32 @@ export class GazeSource {
     tick();
   }
 
+  // Eye tracker externo a través del programa puente local (bridge/).
+  // Mensajes JSON: { x, y, valid } con x, y normalizados 0–1 respecto a la
+  // pantalla completa. La calibración la hace el software del fabricante.
+  startEyeTracker(url, onStatus = () => {}) {
+    this.mode = 'eyetracker';
+    return new Promise((resolve, reject) => {
+      onStatus('Conectando con el eye tracker en ' + url + '…');
+      const ws = new WebSocket(url); this.ws = ws;
+      let n = 0, fpsT = performance.now(), opened = false;
+      ws.onopen = () => { opened = true; onStatus(''); setTimeout(resolve, 1500); };
+      ws.onerror = () => { if (!opened) reject(new Error('No se encontró el programa puente del eye tracker en ' + url + '. ¿Está abierto?')); };
+      ws.onclose = () => { if (opened && this.mode === 'eyetracker') onStatus('Se perdió la conexión con el eye tracker'); };
+      ws.onmessage = (ev) => {
+        const t = performance.now();
+        let m; try { m = JSON.parse(ev.data); } catch { return; }
+        if (m.info) { this.cameraInfo = { label: m.info.modelo || 'eye tracker', frameRate: m.info.frecuencia, serie: m.info.serie }; if (!opened) return; resolve(); return; }
+        n++; if (t - fpsT > 1000) { this.fps = n * 1000 / (t - fpsT); n = 0; fpsT = t; }
+        const ok = !!m.valid && Number.isFinite(m.x) && Number.isFinite(m.y);
+        // En pantalla completa, la ventana coincide con la pantalla.
+        this.emit({ t, ok, reason: ok ? '' : 'sin-dato', x: ok ? m.x * innerWidth : undefined, y: ok ? m.y * innerHeight : undefined });
+      };
+    });
+  }
+
   stop() {
+    if (this.ws) { this.ws.onclose = null; this.ws.close(); this.ws = null; }
     this.mode = null;
     if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
     if (this._mm) removeEventListener('pointermove', this._mm);

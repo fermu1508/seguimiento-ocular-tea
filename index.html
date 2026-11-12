@@ -14,48 +14,70 @@
   <section data-screen="inicio" class="panel">
     <h1>Seguimiento Ocular TEA</h1>
     <p class="sub">Sistema de entrenamiento y evaluación del seguimiento visual. El video de la cámara se procesa en este equipo y nunca se envía a ningún servidor; sólo se guardan coordenadas de la mirada.</p>
-    <form id="form-inicio" class="grid">
-      <label>Código del participante <input name="participante" required placeholder="p. ej. TEA-01" pattern="[A-Za-z0-9_\-]+" title="Sólo letras, números, guiones (sin nombres reales)"></label>
-      <label>Grupo
-        <select name="grupo"><option value="TEA">TEA</option><option value="DT">Desarrollo típico</option></select></label>
-      <label>Condición
-        <select name="condicion"><option value="entrenamiento">Entrenamiento</option><option value="control">Control</option></select></label>
-      <label>Tipo de sesión
-        <select name="tipoSesion">
-          <option value="entrenamiento">Entrenamiento (módulo adaptativo)</option>
-          <option value="T0">Evaluación T0 (basal)</option>
-          <option value="T1">Evaluación T1 (mes 6)</option>
-          <option value="T2">Evaluación T2 (mes 12)</option>
-          <option value="libre">Práctica libre (elegir módulo)</option>
-        </select></label>
-      <label id="campo-modulo" hidden>Módulo <select name="modulo"></select></label>
-      <label>Ancho visible de la pantalla (cm) <input name="anchoCm" type="number" step="0.1" min="15" max="200" required value="34.5"></label>
-      <label>Distancia ojos–pantalla (cm) <input name="distanciaCm" type="number" step="1" min="30" max="150" required value="60"></label>
-      <label>Fuente de mirada
-        <select name="entrada"><option value="camara">Cámara web</option><option value="raton">Ratón (prueba sin cámara)</option></select></label>
-      <label class="check"><input type="checkbox" name="sonido" checked> Sonidos de recompensa</label>
-      <label class="check"><input type="checkbox" name="deriva" checked> Corrección de deriva antes de cada bloque</label>
-      <details class="full">
+    <form id="form-inicio">
+      <h3>Participante</h3>
+      <div class="grid">
+        <label>Participante
+          <select name="participanteSel"><option value="__nuevo">+ Registrar nuevo participante</option></select></label>
+        <label>Código <input name="codigo" required placeholder="p. ej. TEA-01" pattern="[A-Za-z0-9_\-]+" title="Sólo letras, números y guiones"></label>
+        <label>Nombre <small>(sólo se guarda en este equipo; no se exporta)</small><input name="nombre" autocomplete="off"></label>
+        <label>Fecha de nacimiento <input name="nacimiento" type="date"></label>
+        <label>Grupo
+          <select name="grupo"><option value="TEA">TEA</option><option value="DT">Desarrollo típico</option></select></label>
+        <label>Condición
+          <select name="condicion"><option value="entrenamiento">Entrenamiento</option><option value="control">Control</option></select></label>
+        <label>Figura del entrenamiento <select name="figura"></select></label>
+        <label>Color de la figura <select name="color"></select></label>
+      </div>
+      <p id="info-participante" class="hint"></p>
+
+      <h3>Sesión</h3>
+      <div class="grid">
+        <label>Tipo de sesión
+          <select name="tipoSesion">
+            <option value="entrenamiento">Entrenamiento (módulo adaptativo)</option>
+            <option value="T0">Evaluación T0 (basal)</option>
+            <option value="T1">Evaluación T1 (mes 6)</option>
+            <option value="T2">Evaluación T2 (mes 12)</option>
+            <option value="libre">Práctica libre (elegir módulo)</option>
+          </select></label>
+        <label id="campo-modulo" hidden>Módulo <select name="modulo"></select></label>
+        <label>Fecha de la sesión <input name="fechaSesion" type="text" readonly></label>
+        <label>Fuente de mirada
+          <select name="entrada">
+            <option value="camara">Cámara web</option>
+            <option value="eyetracker">Eye tracker (programa puente)</option>
+            <option value="raton">Ratón (prueba sin cámara)</option>
+          </select></label>
+        <label>Ancho visible de la pantalla (cm) <input name="anchoCm" type="number" step="0.1" min="15" max="200" required value="34.5"></label>
+        <label>Distancia ojos–pantalla (cm) <input name="distanciaCm" type="number" step="1" min="30" max="150" required value="60"></label>
+        <label class="check"><input type="checkbox" name="deriva" checked> Corrección de deriva antes de cada bloque (cámara)</label>
+      </div>
+      <details>
         <summary>Parámetros de análisis (mantener iguales durante todo el estudio)</summary>
         <div class="grid" id="parametros"></div>
       </details>
-      <div class="full actions">
+      <div class="actions">
         <button type="submit" class="primary">Comenzar</button>
-        <button type="button" data-go="historial">Historial y exportación</button>
+        <button type="button" data-go="historial">Historial, Drive y exportación</button>
       </div>
     </form>
   </section>
 
-  <!-- 2. CÁMARA -->
+  <!-- 2. PREPARACIÓN (cámara o eye tracker) -->
   <section data-screen="camara" class="panel" hidden>
     <h2>Preparación</h2>
-    <div class="cam-wrap"><video id="video" playsinline muted></video><canvas id="cam-overlay"></canvas></div>
+    <div class="cam-wrap" id="cam-wrap"><video id="video" playsinline muted></video><canvas id="cam-overlay"></canvas></div>
     <p id="cam-status" class="status">Iniciando…</p>
-    <ul class="tips">
+    <ul class="tips" id="tips-camara">
       <li>Iluminación frontal y uniforme; evitar ventanas detrás del niño.</li>
       <li>La cámara a la altura de los ojos, centrada sobre la pantalla.</li>
       <li>Mantener la distancia indicada (ideal: mentonera o silla fija).</li>
       <li>El rostro debe quedar dentro del recuadro, sin lentes que reflejen.</li>
+    </ul>
+    <ul class="tips" id="tips-et" hidden>
+      <li>Calibre primero el eye tracker con el software del fabricante.</li>
+      <li>El sistema hará después una validación de 5 puntos para registrar la exactitud.</li>
     </ul>
     <div class="actions">
       <button id="btn-calibrar" class="primary" disabled>Calibrar (pantalla completa)</button>
@@ -93,9 +115,11 @@
     <div id="res-info"></div>
     <div class="table-wrap"><table id="res-tabla"></table></div>
     <div id="res-progresion" class="note"></div>
+    <p id="res-drive" class="hint"></p>
     <div class="actions">
-      <button id="btn-crudo" >Descargar datos crudos (CSV)</button>
+      <button id="btn-crudo">Descargar datos crudos (CSV)</button>
       <button id="btn-resumen-sesion">Descargar resumen (CSV)</button>
+      <button id="btn-res-drive" hidden>Subir a Google Drive</button>
       <button data-go="historial">Historial</button>
       <button data-go="inicio" class="primary">Nueva sesión</button>
     </div>
@@ -104,6 +128,14 @@
   <!-- 6. HISTORIAL -->
   <section data-screen="historial" class="panel wide" hidden>
     <h2>Historial y exportación</h2>
+    <div class="drive-box">
+      <b>Google Drive</b> <span id="drive-estado" class="hint"></span>
+      <div class="actions">
+        <button id="btn-drive-conectar">Conectar Google Drive</button>
+        <button id="btn-drive-pendientes" disabled>Subir sesiones pendientes</button>
+      </div>
+    </div>
+    <p id="almacenamiento" class="hint"></p>
     <label>Participante <select id="hist-participante"></select></label>
     <div id="hist-graficas"></div>
     <div class="table-wrap"><table id="hist-tabla"></table></div>

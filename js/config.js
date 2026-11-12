@@ -2,7 +2,7 @@
 // y parámetros de análisis. Todo valor espacial está en grados de ángulo visual
 // (°) y todo valor temporal en segundos, salvo que se indique otra cosa.
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 
 // Parámetros de análisis. Deben mantenerse IDÉNTICOS en todas las sesiones del
 // estudio longitudinal (Kasneci et al., 2024); se guardan junto con cada sesión.
@@ -59,3 +59,21 @@ export const PROGRESSION = { advanceOnTarget: 0.70, retreatOnTarget: 0.35, sessi
 // Una sesión de entrenamiento: bloques del módulo actual, total ≤ 10 min de
 // actividad ocular (metodología de la tesis).
 export const TRAINING_BLOCKS_PER_SESSION = 3;
+
+// Apariencia del objeto. Estímulos NO sociales (sin rostro), según la
+// metodología: figuras geométricas de colores sólidos sobre fondo uniforme.
+//  - Evaluación, calibración y deriva: diana con cruz y punto central, la forma
+//    que produce la fijación más estable (Thaler et al., 2013).
+//  - Entrenamiento: figura geométrica elegida para cada participante y
+//    mantenida durante todo el estudio.
+export const FIGURES = { circulo: 'Círculo', estrella: 'Estrella', rombo: 'Rombo', cuadrado: 'Cuadrado' };
+export const COLORS = { amarillo: '#ffd43b', naranja: '#ff922b', verde: '#51cf66', cian: '#22b8cf', rosa: '#f783ac' };
+export const EVAL_TARGET = { figura: 'diana', color: '#ffffff' };
+
+// Retroalimentación durante la actividad: DESACTIVADA en el protocolo actual.
+// Si más adelante se decide usarla, basta con cambiar estos valores a true
+// (quedará registrado en cada sesión).
+export const FEEDBACK = { visual: false, sonido: false, estrellas: false };
+
+// Eye tracker externo: dirección del programa puente local (bridge/).
+export const EYETRACKER_URL = 'ws://localhost:8770';
