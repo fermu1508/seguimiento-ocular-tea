@@ -5,40 +5,8 @@
 
 import { FaceLandmarker, FilesetResolver } from '../vendor/mediapipe/vision_bundle.mjs';
 
-// Índices de la malla facial de MediaPipe.
-const EYE = {
-  R: { a: 33, b: 133, top: 159, bot: 145, iris: 468 },   // ojo derecho del niño
-  L: { a: 362, b: 263, top: 386, bot: 374, iris: 473 },  // ojo izquierdo del niño
-};
-const NOSE = 1;
-
-function eyeFeatures(lm, e) {
-  const A = lm[e.a], B = lm[e.b], I = lm[e.iris];
-  const ox = (A.x + B.x) / 2, oy = (A.y + B.y) / 2;
-  let ux = B.x - A.x, uy = B.y - A.y;
-  const w = Math.hypot(ux, uy) || 1e-6; ux /= w; uy /= w;
-  const dx = I.x - ox, dy = I.y - oy;
-  const open = Math.hypot(lm[e.top].x - lm[e.bot].x, lm[e.top].y - lm[e.bot].y) / w;
-  return { ix: (dx * ux + dy * uy) / w, iy: (-dx * uy + dy * ux) / w, open, w };
-}
-
-// Vector de rasgos de una muestra. null si no hay rostro o hay parpadeo.
-export function extractFeatures(result) {
-  const lm = result.faceLandmarks && result.faceLandmarks[0];
-  if (!lm) return { ok: false, reason: 'sin-rostro' };
-  const r = eyeFeatures(lm, EYE.R), l = eyeFeatures(lm, EYE.L);
-  const open = (r.open + l.open) / 2;
-  let yaw = 0, pitch = 0, roll = 0;
-  const M = result.facialTransformationMatrixes && result.facialTransformationMatrixes[0];
-  if (M) {
-    const d = M.data; // 4×4 por columnas
-    const r20 = d[2], r21 = d[6], r22 = d[10], r10 = d[1], r00 = d[0];
-    pitch = Math.atan2(r21, r22); yaw = Math.atan2(-r20, Math.hypot(r21, r22)); roll = Math.atan2(r10, r00);
-  }
-  const scale = Math.hypot(lm[EYE.R.a].x - lm[EYE.L.b].x, lm[EYE.R.a].y - lm[EYE.L.b].y);
-  const f = [r.ix, r.iy, l.ix, l.iy, open, yaw, pitch, roll, lm[NOSE].x, lm[NOSE].y, scale];
-  return { ok: open > 0.12, reason: open > 0.12 ? '' : 'parpadeo', f, open, scale, landmarks: lm };
-}
+import { extractFeatures } from './features.js';
+export { extractFeatures };
 
 export { GazeModel, HEAD_LIMITS } from './gaze-model.js';
 
@@ -63,29 +31,64 @@ export class GazeSource {
   on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   emit(s) { for (const fn of this.listeners) fn(s); }
 
+  // El modelo corre en un proceso aparte (worker) para no competir con el
+  // dibujo del juego; si el navegador no lo permite, en el hilo principal.
+  _startWorker(wasmBase, modelUrl) {
+    return new Promise((resolve, reject) => {
+      let w;
+      try { w = new Worker(new URL('./face-worker.js', import.meta.url), { type: 'module' }); } catch (e) { reject(e); return; }
+      const timer = setTimeout(() => { w.terminate(); reject(new Error('tiempo agotado')); }, 45000);
+      w.onmessage = (ev) => {
+        if (ev.data.type === 'ready') { clearTimeout(timer); this.delegate = ev.data.delegate; resolve(w); }
+        else if (ev.data.type === 'error') { clearTimeout(timer); w.terminate(); reject(new Error(ev.data.message)); }
+      };
+      w.onerror = (e) => { clearTimeout(timer); w.terminate(); reject(e); };
+      w.postMessage({ type: 'init', wasmBase, modelUrl });
+    });
+  }
+
   async startCamera(video, onStatus = () => {}, res = [640, 480]) {
     this.res = res.join('x');
     this.mode = 'camara';
     onStatus('Cargando modelo de visión…');
-    const fileset = await FilesetResolver.forVisionTasks(new URL('../vendor/mediapipe/wasm', import.meta.url).href);
-    const opts = (delegate) => ({
-      baseOptions: { modelAssetPath: new URL('../models/face_landmarker.task', import.meta.url).href, delegate },
-      runningMode: 'VIDEO', numFaces: 1, outputFacialTransformationMatrixes: true,
-    });
-    // GPU es mucho más rápido; si el navegador no lo permite se usa CPU.
-    try { this.landmarker = await FaceLandmarker.createFromOptions(fileset, opts('GPU')); this.delegate = 'GPU'; }
-    catch { this.landmarker = await FaceLandmarker.createFromOptions(fileset, opts('CPU')); this.delegate = 'CPU'; }
+    const wasmBase = new URL('../vendor/mediapipe/wasm', import.meta.url).href;
+    const modelUrl = new URL('../models/face_landmarker.task', import.meta.url).href;
+    // ?sinworker en la dirección fuerza el método anterior (diagnóstico).
+    const allowWorker = !new URLSearchParams(location.search).has('sinworker');
+    this.worker = !allowWorker ? null : await this._startWorker(wasmBase, modelUrl).catch((e) => { console.warn('Worker no disponible, se usa el hilo principal:', e && e.message); return null; });
+    if (!this.worker) {
+      const fileset = await FilesetResolver.forVisionTasks(wasmBase);
+      const opts = (delegate) => ({ baseOptions: { modelAssetPath: modelUrl, delegate }, runningMode: 'VIDEO', numFaces: 1, outputFacialTransformationMatrixes: true });
+      // GPU es mucho más rápido; si el navegador no lo permite se usa CPU.
+      try { this.landmarker = await FaceLandmarker.createFromOptions(fileset, opts('GPU')); this.delegate = 'GPU'; }
+      catch { this.landmarker = await FaceLandmarker.createFromOptions(fileset, opts('CPU')); this.delegate = 'CPU'; }
+    }
+    this.hilo = this.worker ? 'paralelo' : 'principal';
     onStatus('Solicitando acceso a la cámara…');
     this.stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: res[0] }, height: { ideal: res[1] }, frameRate: { ideal: 30 }, facingMode: 'user' }, audio: false });
     video.srcObject = this.stream; await video.play();
     this.video = video;
     const settings = this.stream.getVideoTracks()[0].getSettings();
-    this.cameraInfo = { width: settings.width, height: settings.height, frameRate: settings.frameRate, label: this.stream.getVideoTracks()[0].label, procesador: this.delegate };
+    this.cameraInfo = { width: settings.width, height: settings.height, frameRate: settings.frameRate, label: this.stream.getVideoTracks()[0].label, procesador: this.delegate, hilo: this.hilo };
     onStatus('');
-    let lastTs = -1, frames = 0, fpsT = performance.now();
+    let lastTs = -1, frames = 0, fpsT = performance.now(), inFlight = 0;
     this.clock = { n: 0, usados: 0, offsets: [] };
+
+    const handle = (t, fe, procMs) => {
+      // Tiempo de procesamiento por imagen (promedio móvil) y frecuencia efectiva.
+      this.procMs = this.procMs ? this.procMs * 0.95 + procMs * 0.05 : procMs;
+      this.cameraInfo.procesamientoMs = +this.procMs.toFixed(1);
+      const now = performance.now();
+      frames++; if (now - fpsT > 1000) { this.fps = frames * 1000 / (now - fpsT); frames = 0; fpsT = now; }
+      const s = { t, ok: fe.ok, reason: fe.reason, f: fe.f, open: fe.open, scale: fe.scale, landmarks: fe.landmarks };
+      if (fe.ok && this.model) { [s.x, s.y] = this.model.predict(fe.f); s.head = this.model.headDeviation(fe.f); }
+      this.emit(s);
+    };
+    if (this.worker) this.worker.onmessage = (ev) => { if (ev.data.type === 'result') { inFlight--; if (this.mode === 'camara') handle(ev.data.t, ev.data, ev.data.procMs); } };
+
     const step = (now, meta) => {
       if (this.mode !== 'camara') return;
+      video.requestVideoFrameCallback(step);
       // Marca temporal: momento de captura del cuadro si el navegador lo informa.
       // Se descarta si viene de otro reloj (algunas cámaras/sistemas).
       const cap = meta && meta.captureTime;
@@ -97,18 +100,17 @@ export class GazeSource {
         const o = [...this.clock.offsets].sort((a, b) => a - b);
         this.clockInfo = { captureTime: !!cap, desfaseMedianoMs: o.length ? +o[o.length >> 1].toFixed(1) : null, fraccionUsada: +(this.clock.usados / this.clock.n).toFixed(2) };
       }
-      const ts = Math.max(now, lastTs + 0.001); lastTs = ts;
-      const d0 = performance.now();
-      const res = this.landmarker.detectForVideo(video, ts);
-      // Tiempo de procesamiento por imagen (promedio móvil): limita la frecuencia.
-      this.procMs = this.procMs ? this.procMs * 0.95 + (performance.now() - d0) * 0.05 : performance.now() - d0;
-      this.cameraInfo.procesamientoMs = +this.procMs.toFixed(1);
-      const fe = extractFeatures(res);
-      frames++; if (now - fpsT > 1000) { this.fps = frames * 1000 / (now - fpsT); frames = 0; fpsT = now; }
-      const s = { t, ok: fe.ok, reason: fe.reason, f: fe.f, open: fe.open, scale: fe.scale, landmarks: fe.landmarks };
-      if (fe.ok && this.model) { [s.x, s.y] = this.model.predict(fe.f); s.head = this.model.headDeviation(fe.f); }
-      this.emit(s);
-      video.requestVideoFrameCallback(step);
+      if (this.worker) {
+        if (inFlight >= 2) return; // el proceso aparte va ocupado: se omite esta imagen
+        const ts = Math.max(now, lastTs + 0.001); lastTs = ts;
+        inFlight++;
+        createImageBitmap(video).then((bitmap) => this.worker.postMessage({ type: 'frame', bitmap, ts, t }, [bitmap])).catch(() => { inFlight--; });
+      } else {
+        const ts = Math.max(now, lastTs + 0.001); lastTs = ts;
+        const d0 = performance.now();
+        const fe = extractFeatures(this.landmarker.detectForVideo(video, ts));
+        handle(t, fe, performance.now() - d0);
+      }
     };
     video.requestVideoFrameCallback(step);
   }
@@ -154,6 +156,7 @@ export class GazeSource {
 
   stop() {
     if (this.ws) { this.ws.onclose = null; this.ws.close(); this.ws = null; }
+    if (this.worker) { this.worker.terminate(); this.worker = null; }
     this.mode = null;
     if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
     if (this._mm) removeEventListener('pointermove', this._mm);

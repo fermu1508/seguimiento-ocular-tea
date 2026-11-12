@@ -182,7 +182,10 @@ El puente incluido funciona con **Tobii Pro**, que tiene SDK para Python. Para o
 index.html            Pantallas: inicio, cámara, calibración, plan, resultados, historial
 css/style.css
 js/config.js          Módulos, batería de evaluación, progresión y parámetros de análisis
-js/tracker.js         MediaPipe, rasgos oculares, regresión de mirada y modo ratón
+js/tracker.js         Fuentes de mirada: cámara (con proceso aparte), eye tracker y ratón
+js/face-worker.js     Proceso aparte (Web Worker) que ejecuta MediaPipe sin frenar el juego
+js/features.js        Rasgos oculares y de la cabeza a partir de la malla facial
+js/gaze-model.js      Regresión de cresta que convierte rasgos en coordenadas de pantalla
 js/stimuli.js         Trayectorias (funciones exactas del tiempo, con semilla reproducible)
 js/analysis.js        Métricas: I-VT, I-DT, ganancia, latencia, tiempo sobre el objeto
 js/storage.js         IndexedDB (participantes y sesiones) y exportación CSV/JSON

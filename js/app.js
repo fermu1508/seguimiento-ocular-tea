@@ -8,6 +8,7 @@ import * as drive from './drive.js';
 const $ = (s) => document.querySelector(s);
 const stage = $('#stage'), ctx = stage.getContext('2d'), msg = $('#stage-msg');
 const gaze = new GazeSource();
+window.seguimientoOcular = { gaze }; // acceso para diagnóstico desde la consola
 const state = { cfg: null, model: null, calidad: null, plan: [], lastSession: null, showGaze: false, participantes: [] };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -137,7 +138,7 @@ async function startPreparation() {
     const dist = s.scale ? `Tamaño del rostro: ${(s.scale * 100).toFixed(0)} %` : '';
     if (s.ok && okCount > 15) {
       const lento = gaze.fps < 20;
-      st.innerHTML = `Rostro y ojos detectados · ${gaze.fps.toFixed(0)} cuadros/s · procesamiento ${gaze.delegate || ''} ${gaze.procMs ? gaze.procMs.toFixed(0) + ' ms' : ''} · ${dist}` +
+      st.innerHTML = `Rostro y ojos detectados · ${gaze.fps.toFixed(0)} cuadros/s · procesamiento ${gaze.delegate || ''} ${gaze.procMs ? gaze.procMs.toFixed(0) + ' ms' : ''} (${gaze.hilo === 'paralelo' ? 'en paralelo' : 'hilo principal'}) · ${dist}` +
         (lento ? `<br><small>⚠ Frecuencia baja (ideal ≥ 25). Cierre otros programas y pestañas; en Chrome active Configuración → Sistema → «Usar aceleración de gráficos cuando esté disponible» y reinicie el navegador.</small>` : '');
       st.className = lento ? 'status' : 'status ok'; btn.disabled = false;
     }

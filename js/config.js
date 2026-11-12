@@ -2,7 +2,7 @@
 // y parámetros de análisis. Todo valor espacial está en grados de ángulo visual
 // (°) y todo valor temporal en segundos, salvo que se indique otra cosa.
 
-export const VERSION = '0.2.3';
+export const VERSION = '0.2.4';
 
 // Parámetros de análisis. Deben mantenerse IDÉNTICOS en todas las sesiones del
 // estudio longitudinal (Kasneci et al., 2024); se guardan junto con cada sesión.
