@@ -1,0 +1,1 @@
+{ "type": "module", "private": true, "scripts": { "test": "node tests/test-analysis.mjs", "start": "python3 -m http.server 8000" } }
